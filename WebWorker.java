@@ -33,8 +33,7 @@ public class WebWorker implements Runnable
 {
 
 private Socket socket;
-private String path = "";
-private boolean fileExists;
+private String newString = "";
 
 /**
 * Constructor: must have a valid open socket
@@ -56,9 +55,9 @@ public void run()
    try {
       InputStream  is = socket.getInputStream();
       OutputStream os = socket.getOutputStream();
-      String http = readHTTPRequest(is);
-      writeHTTPHeader(os,"text/html",http);
-      writeContent(os,http);
+      readHTTPRequest(is);
+      writeHTTPHeader(os,typeCheck(newString),checkStatus(newString));
+      writeContent(os);
       os.flush();
       socket.close();
    } catch (Exception e) {
@@ -71,21 +70,22 @@ public void run()
 /**
 * Read the HTTP request header.
 **/
-private String readHTTPRequest(InputStream is)
+private void readHTTPRequest(InputStream is)
 {
    String line;
-   String newline = "";
+   String [] stringArray;
    BufferedReader r = new BufferedReader(new InputStreamReader(is));
    while (true) {
      try {
        while (!r.ready()) Thread.sleep(1);
          line = r.readLine();
-	 String readget = line.substring(0, 3);
-         if(readget.equals("GET")) {
-           newline = line.substring(4);
-           newline = newline.substring(0,newline.indexOf(" "));
-         } 		
+	      String readget = line.substring(0, 3);
          System.err.println("Request line: ("+line+")");
+         if(line.substring(0,3).equals("GET")) {
+           stringArray = line.split(" ");
+           newString = stringArray[1];
+           newString = newString.substring(1);
+         } 		
          if (line.length()==0) break;
      } 
      catch (Exception e) {
@@ -93,7 +93,7 @@ private String readHTTPRequest(InputStream is)
        break;
      }
    }
-   return newline;
+   return;
 }
 
 /**
@@ -106,38 +106,18 @@ private void writeHTTPHeader(OutputStream os, String contentType, String newline
    Date d = new Date();
    DateFormat df = DateFormat.getDateTimeInstance();
    df.setTimeZone(TimeZone.getTimeZone("GMT"));
-   
-   File exist34 = new File(newline);
 
-   if(exist34.exists() && !exist34.isDirectory()){
-     os.write("HTTP/1.1 200 OK\n".getBytes());
-     os.write("Date: ".getBytes());
-     os.write((df.format(d)).getBytes());
-     os.write("\n".getBytes());
-     os.write("Server: Jon's very own server\n".getBytes());
-     //os.write("Last-Modified: Wed, 08 Jan 2003 23:11:55 GMT\n".getBytes());
-     //os.write("Content-Length: 438\n".getBytes()); 
-     os.write("Connection: close\n".getBytes());
-     os.write("Content-Type: ".getBytes());
-     os.write(contentType.getBytes());
-     os.write("\n\n".getBytes()); // HTTP header ends with 2 newlines
-   }
-   else{
-     os.write("HTTP/1.1 404 Not Found\n".getBytes());
-     os.write("Date: ".getBytes());
-     os.write((df.format(d)).getBytes());
-     os.write("\n".getBytes());
-     os.write("Server: Jon's very own server\n".getBytes());
-     //os.write("Last-Modified: Wed, 08 Jan 2003 23:11:55 GMT\n".getBytes());
-     //os.write("Content-Length: 438\n".getBytes()); 
-     os.write("Connection: close\n".getBytes());
-     os.write("Content-Type: ".getBytes());
-     os.write(contentType.getBytes());
-     os.write("\n\n".getBytes()); // HTTP header ends with 2 newlines
-   }
-   
-   
+   os.write(newline.getBytes());
+   os.write("Date: ".getBytes());
+   os.write((df.format(d)).getBytes());
+   os.write("\n".getBytes());
+   os.write("Server: THIS IS NOT A DRILL\n".getBytes());
+   os.write("Connection: close\n".getBytes());
+   os.write("Content-Type: ".getBytes());
+   os.write(contentType.getBytes());
+   os.write("\n\n".getBytes()); // HTTP header ends with 2 newlines
    return;
+   
 }
 
 /**
@@ -145,32 +125,87 @@ private void writeHTTPHeader(OutputStream os, String contentType, String newline
 * be done after the HTTP header has been written out.
 * @param os is the OutputStream object to write to
 **/
-private void writeContent(OutputStream os, String newline) throws Exception
+private void writeContent(OutputStream os) throws Exception
 {
-  newline = newline.substring(1);
-  File newfile = new File(newline);
+  DateFormat day = new SimpleDateFormat("MM/dd/yyyy");
+  Date today = new Date();
 
-  if(newfile.exists() && !newfile.isDirectory()){
-      FileInputStream streak = new FileInputStream(newline);
-      BufferedReader in = new BufferedReader(new InputStreamReader(streak));
+  if((typeCheck(newString)).equals("text/html")){
+
+    try {
+      InputStream istream = new FileInputStream(newString);
+      BufferedReader in = new BufferedReader(new InputStreamReader(istream));
       String str;
       while ((str = in.readLine()) != null) {
-        if(str.equals("<cs371date>")) {
-          SimpleDateFormat currentFormat =  new SimpleDateFormat("dd/MM/yy HH:mm:ss");
-          Date currentDate = new Date();
-          String theDate = currentFormat.format(currentDate);
-          os.write(theDate.getBytes());
-        }
-        if(str.equals("<cs371server>")) {
-          os.write("Christian's server".getBytes());
-        }
+        if(str.contains("<cs371date>"))
+          str = str.replace("<cs371date>", day.format(today));
+        if(str.contains("<cs371server>"))
+          str = str.replace("<cs371server>", "Christian's Server!");
         os.write(str.getBytes());
-      }  
-      in.close();   
+      }
+      in.close();
+    } 
+    catch (IOException e) {
+      os.write("<html><head></head><body>HTTP/1.1 404 Not Found\r\n Content-type: text/html\r\n\r\n".getBytes());
+      os.write(newString.getBytes());
+      os.write(" not found</body></html>\n".getBytes());
+      os.close();
+   }
+ }//end html if statement    
+   
+ else {   
+   try {
+     FileInputStream in = null;
+     try {
+       in = new FileInputStream(newString);     
+       int c;
+       while ((c = in.read()) != -1) {
+         os.write(c);
+       }
+     } 
+     finally {
+       if(in != null) {
+         in.close();
+       }
+     }
+   }
+   catch (FileNotFoundException e) {
+     os.write("<html><head></head><body>HTTP/1.1 404 Not Found\r\n Content-type: text/html\r\n\r\n".getBytes());
+     os.write(newString.getBytes());
+     os.write(" not found</body></html>\n".getBytes());
+   }   
+ }//end else
+}
+ 
+private String checkStatus(String statusString){
+  try {
+    InputStream istream = new FileInputStream(statusString);
+    return "HTTP/1.1 200 OK\n";
   }
-  else{
-    os.write("404 Not Found\n".getBytes());
+  catch(FileNotFoundException error){
+    return "HTTP/1.1 404 Not Found\n";
   }
+}
+
+private String typeCheck (String inFile){
+   
+  String extension = inFile.substring(inFile.lastIndexOf('.'));   
+  extension.toLowerCase();
+
+  if(extension.equals(".html"))
+    return "text/html";
+  else if(extension.equals(".gif"))
+    return "image/gif";
+  else if(extension.equals(".jpeg"))
+    return "image/jpeg";
+  else if(extension.equals(".png"))
+    return "image/png";
+   
+  else if(extension.equals(".ico"))
+    return "image/x-icon";
+      
+  else
+    return "error";
 }
 
 } // end class
